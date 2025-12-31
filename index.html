@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maria Smart Greenhouse</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f4; padding: 20px; }
+        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+        .temp { font-size: 3em; color: #e74c3c; font-weight: bold; }
+        .humi { font-size: 2em; color: #3498db; }
+        .status { margin-top: 20px; padding: 10px; border-radius: 10px; font-weight: bold; }
+        .on { background: #ffebeb; color: #e74c3c; border: 1px solid #e74c3c; }
+        .off { background: #ebffeb; color: #27ae60; border: 1px solid #27ae60; }
+        .btn { padding: 12px 20px; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin: 5px; }
+        .btn-on { background: #e74c3c; }
+        .btn-off { background: #95a5a6; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>Smart Greenhouse Maria</h2>
+        <hr>
+        <p>Suhu Saat Ini:</p>
+        <div id="temp" class="temp">-- °C</div>
+        
+        <p>Kelembapan:</p>
+        <div id="humi" class="humi">-- %</div>
+
+        <div id="status-box" class="status">Menghubungkan...</div>
+
+        <div style="margin-top: 25px;">
+            <p>Kontrol Manual Jarak Jauh:</p>
+            <button class="btn btn-on" onclick="kirimPerintah('ON')">NYALAKAN KIPAS</button>
+            <button class="btn btn-off" onclick="kirimPerintah('OFF')">MATIKAN KIPAS</button>
+        </div>
+    </div>
+
+    <script>
+        const broker = "broker.hivemq.com";
+        const port = 8000; 
+        const clientID = "web_maria_" + Math.random().toString(16).substr(2, 8);
+
+        const client = new Paho.MQTT.Client(broker, port, clientID);
+
+        client.onConnectionLost = (responseObject) => {
+            document.getElementById("status-box").innerHTML = "Koneksi Terputus!";
+            document.getElementById("status-box").className = "status";
+        };
+
+        client.onMessageArrived = (message) => {
+            console.log("Pesan datang: " + message.payloadString);
+            if (message.destinationName === "greenhouse/maria/temp") {
+                document.getElementById("temp").innerHTML = message.payloadString + " °C";
+                updateStatus(parseFloat(message.payloadString));
+            } else if (message.destinationName === "greenhouse/maria/humi") {
+                document.getElementById("humi").innerHTML = message.payloadString + " %";
+            }
+        };
+
+        function updateStatus(t) {
+            const box = document.getElementById("status-box");
+            if (t > 30) {
+                box.innerHTML = "STATUS: KIPAS ON (OTOMATIS)";
+                box.className = "status on";
+            } else {
+                box.innerHTML = "STATUS: KIPAS OFF (NORMAL)";
+                box.className = "status off";
+            }
+        }
+
+        function kirimPerintah(command) {
+            if (client.isConnected()) {
+                let message = new Paho.MQTT.Message(command);
+                message.destinationName = "greenhouse/maria/manual_kipas";
+                client.send(message);
+                alert("Perintah " + command + " terkirim!");
+            } else {
+                alert("Belum terhubung ke server.");
+            }
+        }
+
+        client.connect({
+            onSuccess: () => {
+                document.getElementById("status-box").innerHTML = "Terhubung ke Cloud";
+                document.getElementById("status-box").style.background = "#e3f2fd";
+                client.subscribe("greenhouse/maria/#");
+            },
+            onFailure: (error) => {
+                document.getElementById("status-box").innerHTML = "Gagal Konek!";
+            },
+            useSSL: false,
+            timeout: 3,
+            keepAliveInterval: 30
+        });
+    </script>
+</body>
+</html>
